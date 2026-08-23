@@ -1,3 +1,6 @@
+import * as fs from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import { Readable } from 'node:stream';
 import {
   DeleteObjectCommand,
@@ -205,14 +208,20 @@ describe('S3AttachmentManager', () => {
     });
 
     it('should handle file path string input', async () => {
-      const fs = require('node:fs/promises');
-      vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from('file content'));
+      // Write a real temp file: fileToBuffer resolves string inputs as file paths
+      const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'vintasend-s3-'));
+      const tempFile = path.join(tempDir, 'file.txt');
+      await fs.writeFile(tempFile, 'file content');
 
       mockS3Client.send.mockResolvedValueOnce({} as any);
 
-      const result = await manager.uploadFile('/path/to/file.txt', 'file.txt');
+      try {
+        const result = await manager.uploadFile(tempFile, 'file.txt');
 
-      expect(result.size).toBeGreaterThan(0);
+        expect(result.size).toBe('file content'.length);
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
     });
   });
 
